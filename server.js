@@ -1,10 +1,76 @@
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
+const zlib = require('zlib');
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10kb' }));
-app.get('/', (req, res) => res.sendFile(__dirname + '/index.html'));
+// ---- Makes the website installable like an app (PWA) ----
+// PNG-START
+function crc32(buf) {
+  let crc = -1;
+  for (let i = 0; i < buf.length; i++) {
+    crc ^= buf[i];
+    for (let k = 0; k < 8; k++) crc = (crc >>> 1) ^ (0xEDB88320 & -(crc & 1));
+  }
+  return (crc ^ -1) >>> 0;
+}
+function chunk(type, data) {
+  const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+  const td = Buffer.concat([Buffer.from(type), data]);
+  const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(td));
+  return Buffer.concat([len, td, crc]);
+}
+function makePng(s) {
+  const row = 1 + s * 3;
+  const raw = Buffer.alloc(row * s);
+  for (let y = 0; y < s; y++) {
+    for (let x = 0; x < s; x++) {
+      let r = 0x5b, g = 0x4b, b = 0xdb;
+      if (x >= 0.38 * s && x <= 0.72 * s && Math.abs(y - 0.5 * s) <= 0.2 * s * (0.72 * s - x) / (0.34 * s)) { r = g = b = 255; }
+      const o = y * row + 1 + x * 3;
+      raw[o] = r; raw[o + 1] = g; raw[o + 2] = b;
+    }
+  }
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(s, 0); ihdr.writeUInt32BE(s, 4); ihdr[8] = 8; ihdr[9] = 2;
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+}
+// PNG-END
+const icons = { 192: makePng(192), 512: makePng(512) };
+app.get('/icon-192.png', (req, res) => res.type('png').send(icons[192]));
+app.get('/icon-512.png', (req, res) => res.type('png').send(icons[512]));
+app.get('/manifest.json', (req, res) => res.json({
+  id: '/',
+  name: 'Nokchem',
+  short_name: 'Nokchem',
+  description: 'Type any topic and watch a narrated visual lesson.',
+  start_url: '/',
+  scope: '/',
+  display: 'standalone',
+  background_color: '#14141c',
+  theme_color: '#5b4bdb',
+  icons: [
+    { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+    { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+    { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+  ],
+}));
+app.get('/sw.js', (req, res) => {
+  res.type('application/javascript').send(
+    "self.addEventListener('install',e=>self.skipWaiting());" +
+    "self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));" +
+    "self.addEventListener('fetch',e=>{});"
+  );
+});
+app.get('/', (req, res) => {
+  let html = fs.readFileSync(__dirname + '/index.html', 'utf8');
+  html = html
+    .replace('</head>', '<link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#5b4bdb"><link rel="icon" href="/icon-192.png"><link rel="apple-touch-icon" href="/icon-192.png"></head>')
+    .replace('</body>', '<script>if("serviceWorker" in navigator){navigator.serviceWorker.register("/sw.js").catch(function(){})}</script></body>');
+  res.type('html').send(html);
+});
 
 const KEY = process.env.GEMINI_API_KEY;
 const MODELS = [...new Set([
