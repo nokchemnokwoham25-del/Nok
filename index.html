@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Nokchem</title>
+<style>
+:root{--bg:#f7f7fb;--card:#fff;--text:#1d1d2b;--muted:#6b6b80;--accent:#5b4bdb;--border:#e3e3ee;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#14141c;--card:#1e1e2a;--text:#ecebf5;--muted:#9a9ab0;--accent:#8b7dff;--border:#33334a}}
+:root[data-theme="dark"]{--bg:#14141c;--card:#1e1e2a;--text:#ecebf5;--muted:#9a9ab0;--accent:#8b7dff;--border:#33334a}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.5}
+main{max-width:640px;margin:0 auto;padding:20px 16px 40px}
+h1{font-size:26px;margin:8px 0 4px}
+p.sub{color:var(--muted);margin:0 0 18px}
+.row{display:flex;gap:8px}
+input{flex:1;min-width:0;padding:14px;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:16px}
+button{padding:14px 18px;border:0;border-radius:12px;background:var(--accent);color:#fff;font-size:16px;font-weight:600}
+button:disabled{opacity:.6}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 20px}
+.chip{background:var(--card);color:var(--text);border:1px solid var(--border);padding:8px 12px;font-size:14px;font-weight:500;border-radius:999px}
+.msg{color:var(--muted);text-align:center;padding:24px 0}
+.player{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden}
+.screen{aspect-ratio:3/2;background:#fff;position:relative;overflow:hidden}
+.screen svg{width:100%;height:100%;display:block;animation:in .7s ease}
+@keyframes in{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}
+.bar{height:5px;background:var(--border)}
+.bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .4s}
+.cap{padding:12px 14px;min-height:72px}
+.ctl{display:flex;gap:8px;justify-content:center;padding:0 14px 14px}
+.ctl button{padding:10px 16px}
+.ctl .sec{background:var(--bg);color:var(--text);border:1px solid var(--border)}
+.ttl{font-weight:700;margin:0 0 6px}
+select{width:100%;padding:14px;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:16px}
+label{display:block;font-size:14px;color:var(--muted);margin:14px 0 6px}
+.form{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px}
+.form button{width:100%;margin-top:18px}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.link{background:none;color:var(--accent);padding:6px 0;font-size:14px}
+.note{font-size:12px;color:var(--muted);margin-top:10px}
+</style>
+</head>
+<body>
+<main>
+<div id="profile" hidden>
+<h1>🎬 Nokchem</h1>
+<p class="sub">Tell us about you so lessons fit your level.</p>
+<div class="form">
+<label for="pn">Your name</label><input id="pn" placeholder="Name" autocomplete="off">
+<label for="pc">Class</label>
+<select id="pc"></select>
+<label for="ps">Favourite subject</label>
+<select id="psub"></select>
+<button id="save">Start learning</button>
+<p class="note">Your details are saved only on this device in this prototype.</p>
+</div></div>
+<div id="home" hidden>
+<div class="top"><h1 id="hi">🎬 Nokchem</h1><button class="link" id="edit">Edit profile</button></div>
+<p class="sub" id="who"></p>
+<div class="row"><input id="q" placeholder="Type a topic" autocomplete="off"><button id="go">Make video</button></div>
+<div class="chips" id="chips"></div>
+<div id="out"></div>
+</div>
+</main>
+<script>
+// For the Android app, set this to your deployed server, e.g. 'https://piclearn.onrender.com'
+const API_URL='';
+const $=id=>document.getElementById(id);
+const q=$('q'),go=$('go'),out=$('out'),chips=$('chips');
+const CLASSES=[...Array(12)].map((_,i)=>'Class '+(i+1)).concat(['College']);
+const SUBJECTS={Science:['Photosynthesis','Water cycle','How a heart works'],Math:['Pythagorean theorem','Fractions','Area of a circle'],English:['Parts of speech','Active and passive voice','Types of sentences'],'Social Studies':['Causes of the French Revolution','Layers of the Earth','How a bill becomes law'],Computer:['How the internet works','What is an algorithm','How a CPU works']};
+let profile=null;
+function load(){try{return JSON.parse(localStorage.getItem('piclearn_profile'))}catch(e){return null}}
+function persist(p){try{localStorage.setItem('piclearn_profile',JSON.stringify(p))}catch(e){}}
+CLASSES.forEach(c=>$('pc').add(new Option(c,c)));
+Object.keys(SUBJECTS).forEach(c=>$('psub').add(new Option(c,c)));
+function showProfile(){stopAudio();$('home').hidden=true;$('profile').hidden=false;
+  if(profile){$('pn').value=profile.name;$('pc').value=profile.cls;$('psub').value=profile.subject}}
+function showHome(){$('profile').hidden=true;$('home').hidden=false;
+  $('who').textContent='Hi '+profile.name+'! '+profile.cls+' · '+profile.subject;
+  chips.innerHTML='';out.innerHTML='';
+  SUBJECTS[profile.subject].forEach(t=>{const b=document.createElement('button');b.className='chip';b.textContent=t;b.onclick=()=>{q.value=t;run()};chips.appendChild(b)})}
+$('save').onclick=()=>{const name=$('pn').value.trim();if(!name){$('pn').focus();return}
+  profile={name,cls:$('pc').value,subject:$('psub').value};persist(profile);showHome()};
+$('edit').onclick=showProfile;
+function clean(text){
+  const m=String(text).match(/<svg[\s\S]*<\/svg>/i);if(!m)return null;
+  const doc=new DOMParser().parseFromString(m[0],'image/svg+xml');
+  const svg=doc.documentElement;
+  if(doc.querySelector('parsererror')||svg.nodeName.toLowerCase()!=='svg')return null;
+  svg.querySelectorAll('script,foreignObject').forEach(n=>n.remove());
+  svg.querySelectorAll('*').forEach(n=>[...n.attributes].forEach(a=>{if(/^on/i.test(a.name))n.removeAttribute(a.name)}));
+  svg.setAttribute('width','100%');svg.setAttribute('height','100%');
+  return svg;
+}
+let scenes=[],idx=0,playing=false,timer=null,token=0;
+function stopAudio(){clearTimeout(timer);clearTimeout(watch);try{speechSynthesis.cancel()}catch(e){}}
+function show(i){
+  idx=Math.max(0,Math.min(scenes.length-1,i));
+  const s=scenes[idx],scr=document.getElementById('scr');
+  scr.innerHTML='';
+  const svg=clean(s.svg);
+  if(svg)scr.appendChild(document.importNode(svg,true));
+  document.getElementById('cap').textContent=s.narration;
+  document.getElementById('prog').style.width=((idx+1)/scenes.length*100)+'%';
+  document.getElementById('cnt').textContent=(idx+1)+' / '+scenes.length;
+}
+let curU=null,watch=null,started=false;
+function vstat(t){const e=document.getElementById('vs');if(e)e.textContent=t}
+function pickVoice(){try{const v=speechSynthesis.getVoices();return v.find(x=>/^en/i.test(x.lang)&&/google|natural|samantha|female/i.test(x.name))||v.find(x=>/^en/i.test(x.lang))||v[0]}catch(e){}}
+function speak(){
+  stopAudio();if(!playing)return;
+  const my=++token,s=scenes[idx];
+  const next=()=>{if(my!==token||!playing)return;
+    if(idx<scenes.length-1){show(idx+1);speak()}else{playing=false;setPlayLabel()}};
+  const ms=Math.max(3500,s.narration.split(/\s+/).length*420);
+  if(!('speechSynthesis' in window)||typeof SpeechSynthesisUtterance==='undefined'){
+    vstat('🔇 Sound is off on this device. Open Nokchem in Chrome and turn the volume up. You can still read the captions.');
+    timer=setTimeout(next,ms);return}
+  started=false;
+  setTimeout(()=>{
+    if(my!==token||!playing)return;
+    try{
+      speechSynthesis.resume();
+      const u=new SpeechSynthesisUtterance(s.narration);curU=u;
+      const v=pickVoice();u.lang=v?v.lang:'en-US';if(v)u.voice=v;u.rate=.95;
+      u.onstart=()=>{started=true;clearTimeout(watch);vstat('🔊 Voice on')};
+      u.onend=()=>{clearTimeout(timer);setTimeout(next,500)};
+      u.onerror=()=>{if(!started)vstat('🔇 Sound is off on this device. Open Nokchem in Chrome and turn the volume up. You can still read the captions.');clearTimeout(timer);timer=setTimeout(next,ms)};
+      speechSynthesis.speak(u);
+      clearTimeout(timer);timer=setTimeout(next,ms+12000);
+      clearTimeout(watch);watch=setTimeout(()=>{if(!started){vstat('🔇 No sound yet. Turn the volume up or open Nokchem in Chrome. You can still read the captions.');clearTimeout(timer);timer=setTimeout(next,ms)}},3000);
+    }catch(e){vstat('🔇 Sound is off. You can still read the captions.');timer=setTimeout(next,ms)}
+  },200);
+}
+function setPlayLabel(){document.getElementById('pp').textContent=playing?'⏸ Pause':(idx===scenes.length-1&&!playing?'↺ Replay':'▶ Play')}
+function toggle(){
+  if(playing){playing=false;stopAudio();token++}
+  else{if(idx===scenes.length-1&&document.getElementById('pp').textContent.includes('Replay'))show(0);playing=true;speak()}
+  setPlayLabel();
+}
+function jump(d){const was=playing;stopAudio();token++;show(idx+d);if(was)speak()}
+function build(title){
+  out.innerHTML='<div class="player"><div class="screen" id="scr"></div><div class="bar"><i id="prog"></i></div><div class="cap"><p class="ttl"></p><div id="cap"></div><div id="vs" class="note"></div></div><div class="ctl"><button class="sec" id="pv">⏮</button><button id="pp">▶ Play</button><button class="sec" id="nx">⏭</button><span id="cnt" class="sub" style="align-self:center;margin:0;color:var(--muted)"></span></div></div>';
+  out.querySelector('.ttl').textContent=title;
+  document.getElementById('pv').onclick=()=>jump(-1);
+  document.getElementById('nx').onclick=()=>jump(1);
+  document.getElementById('pp').onclick=toggle;
+  show(0);
+}
+async function run(){
+  const topic=q.value.trim();if(!topic)return;
+  stopAudio();token++;playing=false;
+  out.innerHTML='<div class="msg">Creating your lesson… this can take up to a minute.</div>';go.disabled=true;
+  try{
+    const resp=await fetch(API_URL+'/api/lesson',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({topic,cls:profile.cls,subject:profile.subject})});
+    if(!resp.ok){let d='';try{d=(await resp.json()).detail||''}catch(x){}throw new Error(d||'server '+resp.status)}
+    const r=await resp.json();
+    scenes=(r.scenes||[]).filter(x=>x&&x.svg&&x.narration);
+    if(!scenes.length)throw new Error('empty');
+    idx=0;build(r.title||topic);
+  }catch(e){
+    out.innerHTML='<div class="msg"></div>';out.firstChild.textContent='Something went wrong: '+e.message;
+  }finally{go.disabled=false}
+}
+go.onclick=run;
+profile=load();profile?showHome():showProfile();
+q.addEventListener('keydown',e=>{if(e.key==='Enter')run()});
+</script>
+</body>
+</html>
